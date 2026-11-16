@@ -1,0 +1,40 @@
+{
+  "name": "Locked Column",
+  "difficulty": "unsolvable",
+  "size": 6,
+  "exit": {
+    "side": "right",
+    "row": 2
+  },
+  "target": "red",
+  "cars": [
+    {
+      "id": "red",
+      "orient": "h",
+      "row": 2,
+      "col": 0,
+      "length": 2
+    },
+    {
+      "id": "A",
+      "orient": "v",
+      "row": 0,
+      "col": 3,
+      "length": 3
+    },
+    {
+      "id": "B",
+      "orient": "v",
+      "row": 3,
+      "col": 3,
+      "length": 3
+    },
+    {
+      "id": "C",
+      "orient": "h",
+      "row": 4,
+      "col": 0,
+      "length": 2
+    }
+  ]
+}

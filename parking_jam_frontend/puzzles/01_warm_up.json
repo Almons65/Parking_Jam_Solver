@@ -1,0 +1,69 @@
+{
+  "name": "Warm-up",
+  "difficulty": "easy",
+  "optimal_moves": 3,
+  "size": 6,
+  "exit": {
+    "side": "right",
+    "row": 2
+  },
+  "target": "red",
+  "cars": [
+    {
+      "id": "red",
+      "orient": "h",
+      "row": 2,
+      "col": 1,
+      "length": 2
+    },
+    {
+      "id": "A",
+      "orient": "h",
+      "row": 4,
+      "col": 4,
+      "length": 2
+    },
+    {
+      "id": "B",
+      "orient": "v",
+      "row": 0,
+      "col": 4,
+      "length": 2
+    },
+    {
+      "id": "C",
+      "orient": "h",
+      "row": 5,
+      "col": 3,
+      "length": 2
+    },
+    {
+      "id": "D",
+      "orient": "v",
+      "row": 4,
+      "col": 1,
+      "length": 2
+    },
+    {
+      "id": "E",
+      "orient": "v",
+      "row": 3,
+      "col": 0,
+      "length": 2
+    },
+    {
+      "id": "F",
+      "orient": "v",
+      "row": 2,
+      "col": 4,
+      "length": 2
+    },
+    {
+      "id": "G",
+      "orient": "h",
+      "row": 1,
+      "col": 0,
+      "length": 2
+    }
+  ]
+}

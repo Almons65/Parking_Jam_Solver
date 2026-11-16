@@ -1,0 +1,2 @@
+pygame>=2.5
+pyswip>=0.2.10   # needed only by the real connector.py; also install SWI-Prolog itself

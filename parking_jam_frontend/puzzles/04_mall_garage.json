@@ -1,0 +1,97 @@
+{
+  "name": "Mall Garage",
+  "difficulty": "medium",
+  "optimal_moves": 15,
+  "size": 6,
+  "exit": {
+    "side": "right",
+    "row": 2
+  },
+  "target": "red",
+  "cars": [
+    {
+      "id": "red",
+      "orient": "h",
+      "row": 2,
+      "col": 2,
+      "length": 2
+    },
+    {
+      "id": "A",
+      "orient": "h",
+      "row": 4,
+      "col": 4,
+      "length": 2
+    },
+    {
+      "id": "B",
+      "orient": "v",
+      "row": 1,
+      "col": 1,
+      "length": 2
+    },
+    {
+      "id": "C",
+      "orient": "v",
+      "row": 3,
+      "col": 2,
+      "length": 2
+    },
+    {
+      "id": "D",
+      "orient": "v",
+      "row": 0,
+      "col": 5,
+      "length": 3
+    },
+    {
+      "id": "E",
+      "orient": "v",
+      "row": 1,
+      "col": 0,
+      "length": 2
+    },
+    {
+      "id": "F",
+      "orient": "v",
+      "row": 0,
+      "col": 3,
+      "length": 2
+    },
+    {
+      "id": "G",
+      "orient": "h",
+      "row": 3,
+      "col": 0,
+      "length": 2
+    },
+    {
+      "id": "H",
+      "orient": "h",
+      "row": 5,
+      "col": 1,
+      "length": 2
+    },
+    {
+      "id": "I",
+      "orient": "h",
+      "row": 0,
+      "col": 1,
+      "length": 2
+    },
+    {
+      "id": "J",
+      "orient": "v",
+      "row": 0,
+      "col": 4,
+      "length": 3
+    },
+    {
+      "id": "K",
+      "orient": "h",
+      "row": 3,
+      "col": 4,
+      "length": 2
+    }
+  ]
+}
