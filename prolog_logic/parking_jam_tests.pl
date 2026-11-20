@@ -5,8 +5,15 @@
 
         swipl parking_jam_tests.pl
 
-    The file must be in the same folder as parking_jam.pl.  Every test
-    group prints a line; the last line says whether all tests passed.
+    The file must be in the same folder as parking_jam.pl and the pj_*
+    modules it loads.  Every test group prints a line; the last line says
+    whether all tests passed.
+
+    Loading parking_jam.pl brings in everything the modules export, so the
+    tests call the predicates by their plain names.  The two predicates
+    that are stored in a module's own database, max_states/1 and
+    user_puzzle/3, are changed through set_max_states/1 and
+    remove_puzzle/1 rather than by asserting into this module.
 
     The expected numbers of moves in expected/2 were computed by a
     separate breadth-first search written in Python, so they do not depend
@@ -15,7 +22,7 @@
 
 :- use_module(library(plunit)).
 :- use_module(library(lists)).
-:- ensure_loaded(parking_jam).
+:- use_module(parking_jam).
 
 :- initialization(run_all_tests, main).
 
@@ -53,6 +60,29 @@ expected(clear_impossible, unsolvable).
 solvable(Name, Length) :-
     expected(Name, Length),
     integer(Length).
+
+%   h(+Goal, +Rows, ?H): the estimate for a board written out in full
+h(Goal, Rows, H) :-
+    parse_puzzle(Goal, Rows, Problem, State),
+    heuristic(Problem, State, H).
+
+%   same_outcome(+Outcome1, +Outcome2): the same answer, allowing two
+%   different solutions of the same length
+same_outcome(solved(Moves1), solved(Moves2)) :-
+    !,
+    length(Moves1, N),
+    length(Moves2, N).
+same_outcome(Outcome, Outcome).
+
+%   estimates_along(+Moves, +Problem, +State, +Left, -Pairs)
+%   Pairs holds Left-Estimate for every position along a solution, where
+%   Left is the number of moves that really remain.
+estimates_along([], _, _, _, []).
+estimates_along([Move|Moves], Problem, State, Left, [Left-H|Pairs]) :-
+    heuristic(Problem, State, H),
+    once(legal_move(Problem, State, Move, Next)),
+    Left1 is Left - 1,
+    estimates_along(Moves, Problem, Next, Left1, Pairs).
 
 %   legal_moves(+Problem, +State, -Moves): all legal moves, sorted
 legal_moves(Problem, State, Moves) :-
@@ -356,8 +386,8 @@ test(solving_from_the_middle) :-
     length(Moves, N).
 
 test(search_limit,
-     [ setup(( retract(user:max_states(Old)), assertz(user:max_states(50)) )),
-       cleanup(( retractall(user:max_states(_)), assertz(user:max_states(Old)) ))
+     [ setup(( max_states(Old), set_max_states(50) )),
+       cleanup(set_max_states(Old))
      ]) :-
     puzzle_problem(exit_expert_1, Problem, Start),
     solve_state(Problem, Start, Outcome, States),
@@ -369,6 +399,167 @@ test(default_limit) :-
     Max == 500000.
 
 :- end_tests(search).
+
+
+/*  ----------------------------------------------------------------------
+    The estimate used by A*
+
+    The estimate must never be larger than the number of moves that are
+    really still needed, or A* could return a solution that is not the
+    shortest.
+    ---------------------------------------------------------------------- */
+
+:- begin_tests(heuristic).
+
+test(exit_counts_cars_in_the_way_and_the_target_car) :-
+    h(exit("X", right), ["XX..", "....", "...."], 1),      % only X must move
+    h(exit("X", right), ["XX.A", "...A", "...."], 2),      % X and A
+    h(exit("X", right), ["XX.AB", "...AB"], 3).            % X, A and B
+
+test(a_car_in_the_way_is_counted_once) :-
+    h(exit("X", right), ["XX.AA"], 2).
+
+test(walls_in_the_way_are_not_counted) :-
+    h(exit("X", right), ["XX#."], 1).
+
+test(cars_outside_the_lane_are_not_counted) :-
+    h(exit("X", right), ["XX..", "..AA"], 1).
+
+test(zero_at_the_goal) :-
+    h(exit("X", right), ["A..", "AXX", "#.."], 0),
+    h(exit("X", left), ["XX."], 0),
+    h(exit("X", up), ["X.", "X.", ".."], 0),
+    h(exit("X", down), ["..", ".X", ".X"], 0).
+
+test(all_four_sides) :-
+    h(exit("X", left), [".XX"], 1),
+    h(exit("X", right), [".XX"], 0),
+    h(exit("X", up), ["..", ".X", ".X"], 1),
+    h(exit("X", down), ["X.", "X.", ".."], 1).
+
+test(clear_counts_the_cars_still_parked) :-
+    h(clear, ["AA.", "..B", "..B"], 2),
+    h(clear, ["AA"], 1),
+    h(clear, ["..", ".#"], 0).
+
+test(cars_that_have_left_are_not_counted) :-
+    parse_puzzle(clear, ["AA.", "..B", "..B"], Problem, _),
+    heuristic(Problem, [out, 2], H1), H1 == 1,
+    heuristic(Problem, [out, out], H2), H2 == 0.
+
+test(zero_exactly_at_a_goal, [forall(puzzle(Name, _, _))]) :-
+    puzzle_problem(Name, Problem, Start),
+    heuristic(Problem, Start, H),
+    (   is_goal(Problem, Start)
+    ->  H == 0
+    ;   H > 0
+    ).
+
+%   the estimate may be too small but never too large
+test(never_larger_than_the_truth, [forall(solvable(Name, Length))]) :-
+    puzzle_problem(Name, Problem, Start),
+    heuristic(Problem, Start, H),
+    H =< Length.
+
+test(never_larger_than_the_truth_along_a_solution,
+     [forall(solvable(Name, Length))]) :-
+    puzzle_problem(Name, Problem, Start),
+    solve(Name, Moves),
+    estimates_along(Moves, Problem, Start, Length, Estimates),
+    forall(member(Left-H, Estimates), H =< Left).
+
+:- end_tests(heuristic).
+
+
+/*  ----------------------------------------------------------------------
+    A* search
+
+    A* must give a solution of exactly the same length as breadth-first
+    search, and must agree with it about puzzles that cannot be solved.
+    ---------------------------------------------------------------------- */
+
+:- begin_tests(astar).
+
+test(shortest_solution, [forall(solvable(Name, Length))]) :-
+    puzzle_problem(Name, Problem, Start),
+    solve(astar, Name, Moves),
+    length(Moves, Found),
+    Found == Length,
+    apply_moves(Problem, Start, Moves, End),
+    is_goal(Problem, End).
+
+test(no_solution, [forall(expected(Name, unsolvable))]) :-
+    puzzle_problem(Name, Problem, Start),
+    solve_state(astar, Problem, Start, Outcome, _),
+    Outcome == unsolvable.
+
+test(solve_fails_when_there_is_no_solution,
+     [forall(expected(Name, unsolvable)), fail]) :-
+    solve(astar, Name, _).
+
+test(both_methods_agree, [forall(puzzle(Name, _, _))]) :-
+    puzzle_problem(Name, Problem, Start),
+    solve_state(bfs, Problem, Start, OutcomeB, _),
+    solve_state(astar, Problem, Start, OutcomeA, _),
+    same_outcome(OutcomeB, OutcomeA).
+
+%   On the built-in puzzles the guidance never costs anything: A* records
+%   at most as many positions as breadth-first search.  This is not true
+%   of every conceivable board, only of the library.
+test(astar_records_no_more_positions, [forall(puzzle(Name, _, _))]) :-
+    puzzle_problem(Name, Problem, Start),
+    solve_state(bfs, Problem, Start, _, StatesB),
+    solve_state(astar, Problem, Start, _, StatesA),
+    StatesA =< StatesB.
+
+test(already_solved) :-
+    parse_puzzle(exit("X", right), ["A.XX", "A..."], Problem, Start),
+    solve_state(astar, Problem, Start, Outcome, States),
+    Outcome == solved([]),
+    States == 1.
+
+test(one_move) :-
+    solve_grid(astar, exit("X", right), ["XX.."], Moves),
+    Moves == [move('X', right, 2)].
+
+test(two_moves_in_order) :-
+    solve_grid(astar, exit("X", right), ["XX.A", "...A", "...."], Moves),
+    Moves == [move('A', down, 1), move('X', right, 2)].
+
+test(solving_from_the_middle) :-
+    puzzle_problem(exit_hard_2, Problem, Start),
+    solve(astar, exit_hard_2, [First|Rest]),
+    once(legal_move(Problem, Start, First, Next)),
+    solve_state(astar, Problem, Next, solved(Moves), _),
+    length(Rest, N),
+    length(Moves, N).
+
+test(solve_state_4_is_breadth_first, [forall(puzzle(Name, _, _))]) :-
+    puzzle_problem(Name, Problem, Start),
+    solve_state(Problem, Start, Outcome1, States1),
+    solve_state(bfs, Problem, Start, Outcome2, States2),
+    States1 == States2,
+    same_outcome(Outcome1, Outcome2).
+
+test(unknown_method, throws(puzzle_error(_))) :-
+    parse_puzzle(clear, ["AA"], Problem, Start),
+    solve_state(depth_first, Problem, Start, _, _).
+
+test(method_names) :-
+    findall(M, search_method(M), Methods),
+    Methods == [bfs, astar],
+    forall(member(M, Methods), ( method_name(M, Name), string(Name) )).
+
+test(search_limit,
+     [ setup(( max_states(Old), set_max_states(50) )),
+       cleanup(set_max_states(Old))
+     ]) :-
+    puzzle_problem(exit_expert_1, Problem, Start),
+    solve_state(astar, Problem, Start, Outcome, States),
+    Outcome == gave_up,
+    States == 50.
+
+:- end_tests(astar).
 
 
 /*  ----------------------------------------------------------------------
@@ -447,15 +638,15 @@ test(names_are_unique) :-
 test(every_puzzle_reads_without_error, [forall(puzzle(Name, _, _))]) :-
     puzzle_problem(Name, _, _).
 
-test(add_and_solve, [cleanup(retractall(user:user_puzzle(t_added, _, _)))]) :-
+test(add_and_solve, [cleanup(remove_puzzle(t_added))]) :-
     add_puzzle(t_added, exit("X", right), ["XX.A", "...A", "...."]),
     solve(t_added, Moves),
     Moves == [move('A', down, 1), move('X', right, 2)].
 
-test(adding_again_replaces, [cleanup(retractall(user:user_puzzle(t_added, _, _)))]) :-
+test(adding_again_replaces, [cleanup(remove_puzzle(t_added))]) :-
     add_puzzle(t_added, clear, ["AA"]),
     add_puzzle(t_added, clear, ["BB", ".."]),
-    findall(Rows, user:user_puzzle(t_added, _, Rows), All),
+    findall(Rows, user_puzzle(t_added, _, Rows), All),
     All == [["BB", ".."]].
 
 test(built_in_name_is_refused, throws(puzzle_error(_))) :-
@@ -470,7 +661,7 @@ test(bad_board_is_refused, throws(puzzle_error(_))) :-
     add_puzzle(t_bad, clear, ["A."]).
 test(bad_board_is_not_stored, [fail]) :-
     catch(add_puzzle(t_bad, clear, ["A."]), puzzle_error(_), true),
-    user:user_puzzle(t_bad, _, _).
+    user_puzzle(t_bad, _, _).
 
 test(load_from_file,
      [ setup(( tmp_file_stream(text, File, Out),
@@ -480,28 +671,31 @@ test(load_from_file,
                format(Out, "puzzle(t_two, exit(\"X\", left), [\".XX\", \"A..\", \"A..\"]).~n", []),
                close(Out) )),
        cleanup(( delete_file(File),
-                 retractall(user:user_puzzle(t_one, _, _)),
-                 retractall(user:user_puzzle(t_two, _, _)) ))
+                 remove_puzzle(t_one),
+                 remove_puzzle(t_two) ))
      ]) :-
     with_output_to(string(_), load_puzzles(File, Added, Skipped)),
     Added == 2,
     Skipped == 2,
     solve(t_one, M1), length(M1, 2),
     solve(t_two, M2), M2 == [move('X', left, 1)],
-    \+ user:user_puzzle(t_bent, _, _).
+    \+ user_puzzle(t_bent, _, _).
 
 test(example_file_loads_and_solves,
      [ condition(( example_file(File), exists_file(File) )),
-       cleanup(forall(member(N, [my_up, my_small_jam, my_digits]),
-                      retractall(user:user_puzzle(N, _, _))))
+       cleanup(forall(member(N, [my_up, my_small_jam, my_digits, my_big_jam]),
+                      remove_puzzle(N)))
      ]) :-
     example_file(File),
     load_puzzles(File, Added, Skipped),
-    Added == 3,
+    Added == 4,
     Skipped == 0,
     solve(my_up, M1), length(M1, 2),
     solve(my_small_jam, M2), length(M2, 4),
-    solve(my_digits, M3), length(M3, 2).
+    solve(my_digits, M3), length(M3, 2),
+    %   my_big_jam is solved with A* only: breadth-first search would
+    %   reach the safety limit on it, which is the point of the example
+    solve(astar, my_big_jam, M4), length(M4, 16).
 
 :- end_tests(library).
 
