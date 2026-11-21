@@ -1,6 +1,7 @@
 :- module(pj_astar,
            [ astar_search/5, % +Problem, +Start, +Max, -Outcome, -States
-           heuristic/3% +Problem, +State, -Estimate ]).
+             heuristic/3     % +Problem, +State, -Estimate
+           ]).
 :- use_module(library(lists)).
 :- use_module(library(assoc)).
 :- use_module(library(heaps)).
